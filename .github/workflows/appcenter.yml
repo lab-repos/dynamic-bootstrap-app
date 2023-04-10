@@ -1,0 +1,51 @@
+name: Deploy to App Runner 
+on:
+  push:
+    branches: [main] # Trigger workflow on git push to main branch
+  workflow_dispatch: # Allow manual invocation of the workflow
+
+jobs:  
+  deploy:
+    runs-on: ubuntu-latest
+    # These permissions are needed to interact with GitHub's OIDC Token endpoint.
+    permissions:
+      id-token: write
+      contents: read
+    
+    steps:            
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1-node16
+        with:
+          # Use GitHub OIDC provider
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          role-to-assume: ${{ secrets.ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+          
+      - name: Deploy to App Runner
+        id: deploy-apprunner
+        uses: awslabs/amazon-app-runner-deploy@main
+        env:
+          SERVER_PORT: 3000
+        with:
+          service: app-runner-git-deploy-service
+          source-connection-arn: ${{ secrets.AWS_CONNECTION_SOURCE_ARN }}
+          repo: https://github.com/${{ github.repository }}
+          branch: ${{ github.ref }}
+          runtime: NODEJS_16
+          build-command: npm install
+          start-command: npm start
+          port: 3000
+          region: ${{ secrets.AWS_REGION }}
+          cpu : 1
+          memory : 2
+          # Deprecated: wait-for-service-stability: true
+          # The new way to control service stability timeout
+          wait-for-service-stability-seconds: 600
+          copy-env-vars: |
+            SERVER_PORT
+#          tags: >
+#            { "env": "test" }
+      
+      - name: App Runner URL
+        run: echo "App runner URL ${{ steps.deploy-apprunner.outputs.service-url }}" 
